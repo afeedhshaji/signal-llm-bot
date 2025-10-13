@@ -60,6 +60,7 @@ func (b *Bot) handleMessages() {
 	}
 
 	for _, ev := range events {
+		log.Printf("Received event: %+v", ev)
 		// Deduplication
 		evb, _ := json.Marshal(ev)
 		hash := sha1.Sum(evb)
@@ -69,9 +70,9 @@ func (b *Bot) handleMessages() {
 			continue
 		}
 
-		msg := message.SimpleExtract(ev, b.BotNumber, b.BotUUID)
+		msg := message.SimpleExtract(&ev, b.BotNumber, b.BotUUID)
 		msg.EventHash = hashStr
-		msg.RawEvent = ev
+		msg.RawEvent = &ev
 
 		// Only act when bot is mentioned
 		if !msg.BotMentioned {
@@ -80,7 +81,14 @@ func (b *Bot) handleMessages() {
 
 		log.Printf("Mentioned in %s -> %q", message.TargetLabel(msg), msg.CleanText)
 
-		response, err := b.GeminiClient.Ask(msg.CleanText)
+		// Build prompt with quote context if present
+		prompt := msg.CleanText
+		if msg.Quote != nil && msg.Quote.Text != "" {
+			prompt = "Context (replying to): \"" + msg.Quote.Text + "\"\n\nUser message: " + msg.CleanText
+			log.Printf("Including reply context from %s: %q", msg.Quote.Author, msg.Quote.Text)
+		}
+
+		response, err := b.GeminiClient.Ask(prompt)
 		if err != nil {
 			log.Printf("Error generating Gemini response: %v", err)
 			continue

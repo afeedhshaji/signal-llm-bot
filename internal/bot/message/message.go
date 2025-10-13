@@ -3,14 +3,9 @@ package message
 import (
 	"regexp"
 	"strings"
-)
 
-type Mention struct {
-	Start  int
-	Length int
-	Number string
-	UUID   string
-}
+	"github.com/afeedhshaji/signal-llm-bot/internal/signal"
+)
 
 type Message struct {
 	SourceNumber string
@@ -18,89 +13,62 @@ type Message struct {
 	GroupID      string
 	RawText      string
 	CleanText    string
-	Mentions     []Mention
+	Mentions     []signal.Mention
 	BotMentioned bool
+	Quote        *signal.Quote
 	EventHash    string
-	RawEvent     map[string]interface{}
+	RawEvent     *signal.Envelope
 }
 
-func SimpleExtract(ev map[string]interface{}, botNumber, botUUID string) Message {
+func SimpleExtract(envelope *signal.Envelope, botNumber, botUUID string) Message {
 	var m Message
-	env, _ := ev["envelope"].(map[string]interface{})
-	if env == nil {
-		if dm, ok := ev["dataMessage"].(map[string]interface{}); ok {
-			if msg, ok := dm["message"].(string); ok {
-				m.RawText = msg
-				m.CleanText = strings.TrimSpace(msg)
-			}
+
+	// Fill Message fields from typed structs
+	m.SourceNumber = envelope.SourceNumber
+	m.SourceUUID = envelope.SourceUUID
+	if envelope.DataMessage != nil {
+		dm := envelope.DataMessage
+		m.RawText = dm.Message
+		m.CleanText = strings.TrimSpace(dm.Message)
+		if dm.GroupInfo != nil {
+			m.GroupID = dm.GroupInfo.GroupID
 		}
-		return m
-	}
-	if sn, ok := env["sourceNumber"].(string); ok && LooksLikePhone(sn) {
-		m.SourceNumber = sn
-	}
-	if src, ok := env["source"].(string); ok {
-		if LooksLikePhone(src) && m.SourceNumber == "" {
-			m.SourceNumber = src
-		} else if !LooksLikePhone(src) {
-			m.SourceUUID = src
-		}
-	}
-	if su, ok := env["sourceUuid"].(string); ok && m.SourceUUID == "" {
-		m.SourceUUID = su
-	}
-	if dm, ok := env["dataMessage"].(map[string]interface{}); ok {
-		if gi, ok := dm["groupInfo"].(map[string]interface{}); ok {
-			if gid, ok := gi["groupId"].(string); ok {
-				m.GroupID = gid
-			}
-		}
-		if raw, ok := dm["message"].(string); ok && raw != "<nil>" {
-			m.RawText = raw
-			if mr, ok := dm["mentions"].([]interface{}); ok && len(mr) > 0 {
-				for _, it := range mr {
-					if mm, ok := it.(map[string]interface{}); ok {
-						men := Mention{}
-						if s, ok := mm["start"].(float64); ok {
-							men.Start = int(s)
-						}
-						if l, ok := mm["length"].(float64); ok {
-							men.Length = int(l)
-						}
-						if num, ok := mm["number"].(string); ok {
-							men.Number = num
-						}
-						if uuid, ok := mm["uuid"].(string); ok {
-							men.UUID = uuid
-						}
-						m.Mentions = append(m.Mentions, men)
-					}
-				}
-				m.CleanText = RemoveMentionsFromText(m.RawText, m.Mentions)
-				for _, men := range m.Mentions {
-					if men.Number != "" && NormalizePhone(men.Number) == NormalizePhone(botNumber) {
-						m.BotMentioned = true
-						break
-					}
-					if men.UUID != "" && botUUID != "" && men.UUID == botUUID {
-						m.BotMentioned = true
-						break
-					}
-				}
-			} else {
-				m.CleanText = strings.TrimSpace(m.RawText)
-				if strings.Contains(strings.ToLower(m.CleanText), strings.ToLower(botNumber)) {
+		if len(dm.Mentions) > 0 {
+			m.Mentions = dm.Mentions
+			m.CleanText = RemoveMentionsFromText(m.RawText, m.Mentions)
+			for _, men := range m.Mentions {
+				if men.Number != "" && NormalizePhone(men.Number) == NormalizePhone(botNumber) {
 					m.BotMentioned = true
-					m.CleanText = strings.ReplaceAll(m.CleanText, botNumber, "")
-					m.CleanText = strings.TrimSpace(m.CleanText)
+					break
+				}
+				if men.UUID != "" && botUUID != "" && men.UUID == botUUID {
+					m.BotMentioned = true
+					break
 				}
 			}
+		} else {
+			if strings.Contains(strings.ToLower(m.CleanText), strings.ToLower(botNumber)) {
+				m.BotMentioned = true
+				m.CleanText = strings.ReplaceAll(m.CleanText, botNumber, "")
+				m.CleanText = strings.TrimSpace(m.CleanText)
+			}
+		}
+		if dm.Quote != nil && dm.Quote.Text != "" {
+			q := &signal.Quote{
+				ID:     dm.Quote.ID,
+				Author: dm.Quote.Author,
+				Text:   dm.Quote.Text,
+			}
+			if q.Author == "" && dm.Quote.AuthorUUID != "" {
+				q.Author = dm.Quote.AuthorUUID
+			}
+			m.Quote = q
 		}
 	}
 	return m
 }
 
-func RemoveMentionsFromText(s string, mentions []Mention) string {
+func RemoveMentionsFromText(s string, mentions []signal.Mention) string {
 	if s == "" || len(mentions) == 0 {
 		return strings.TrimSpace(s)
 	}

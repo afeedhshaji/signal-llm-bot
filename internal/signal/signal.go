@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ func NewSignalClient(apiURL, number string) *SignalClient {
 }
 
 // ReceiveEvents fetches new events from the Signal REST API for the given number.
-func (c *SignalClient) ReceiveEvents() ([]map[string]interface{}, error) {
+func (c *SignalClient) ReceiveEvents() ([]Envelope, error) {
 	fmt.Printf("[signal] Fetching events for %s from %s\n", c.Number, c.APIURL)
 	url := fmt.Sprintf("%s/v1/receive/%s", strings.TrimRight(c.APIURL, "/"), c.Number)
 	req, err := http.NewRequest("GET", url, nil)
@@ -45,14 +46,22 @@ func (c *SignalClient) ReceiveEvents() ([]map[string]interface{}, error) {
 	if len(bodyBytes) == 0 {
 		return nil, nil
 	}
-	var events []map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &events); err != nil {
-		var single map[string]interface{}
+	// Unmarshal as array of EnvelopeWrapper
+	var wrappers []EnvelopeWrapper
+	if err := json.Unmarshal(bodyBytes, &wrappers); err != nil {
+		// Try single object
+		var single EnvelopeWrapper
 		if err2 := json.Unmarshal(bodyBytes, &single); err2 == nil {
-			events = append(events, single)
+			wrappers = append(wrappers, single)
 		} else {
 			return nil, fmt.Errorf("decode receive response: %v", err)
 		}
+	}
+	log.Printf("[signal] Received events for %s: %s\n", c.Number, string(bodyBytes))
+	// Extract Envelopes
+	var events []Envelope
+	for _, w := range wrappers {
+		events = append(events, w.Envelope)
 	}
 	return events, nil
 }
