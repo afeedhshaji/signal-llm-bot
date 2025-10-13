@@ -80,7 +80,14 @@ func (b *Bot) handleMessages() {
 
 		log.Printf("Mentioned in %s -> %q", message.TargetLabel(msg), msg.CleanText)
 
-		response, err := b.GeminiClient.Ask(msg.CleanText)
+		// Build prompt with quote context if present
+		prompt := msg.CleanText
+		if msg.Quote != nil && msg.Quote.Text != "" {
+			prompt = "Context (replying to): \"" + msg.Quote.Text + "\"\n\nUser message: " + msg.CleanText
+			log.Printf("Including reply context from %s: %q", msg.Quote.Author, msg.Quote.Text)
+		}
+
+		response, err := b.GeminiClient.Ask(prompt)
 		if err != nil {
 			log.Printf("Error generating Gemini response: %v", err)
 			continue

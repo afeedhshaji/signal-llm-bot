@@ -12,6 +12,12 @@ type Mention struct {
 	UUID   string
 }
 
+type Quote struct {
+	ID     int64
+	Author string
+	Text   string
+}
+
 type Message struct {
 	SourceNumber string
 	SourceUUID   string
@@ -20,6 +26,7 @@ type Message struct {
 	CleanText    string
 	Mentions     []Mention
 	BotMentioned bool
+	Quote        *Quote
 	EventHash    string
 	RawEvent     map[string]interface{}
 }
@@ -53,6 +60,25 @@ func SimpleExtract(ev map[string]interface{}, botNumber, botUUID string) Message
 		if gi, ok := dm["groupInfo"].(map[string]interface{}); ok {
 			if gid, ok := gi["groupId"].(string); ok {
 				m.GroupID = gid
+			}
+		}
+		// Extract quote/reply context
+		if quote, ok := dm["quote"].(map[string]interface{}); ok {
+			q := &Quote{}
+			if id, ok := quote["id"].(float64); ok {
+				q.ID = int64(id)
+			}
+			if author, ok := quote["author"].(string); ok {
+				q.Author = author
+			}
+			if authorUuid, ok := quote["authorUuid"].(string); ok && q.Author == "" {
+				q.Author = authorUuid
+			}
+			if text, ok := quote["text"].(string); ok {
+				q.Text = text
+			}
+			if q.Text != "" {
+				m.Quote = q
 			}
 		}
 		if raw, ok := dm["message"].(string); ok && raw != "<nil>" {
