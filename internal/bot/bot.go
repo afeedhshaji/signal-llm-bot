@@ -60,6 +60,7 @@ func (b *Bot) handleMessages() {
 	}
 
 	for _, ev := range events {
+		log.Printf("Received event: %+v", ev)
 		// Deduplication
 		evb, _ := json.Marshal(ev)
 		hash := sha1.Sum(evb)
@@ -69,9 +70,9 @@ func (b *Bot) handleMessages() {
 			continue
 		}
 
-		msg := message.SimpleExtract(ev, b.BotNumber, b.BotUUID)
+		msg := message.SimpleExtract(&ev, b.BotNumber, b.BotUUID)
 		msg.EventHash = hashStr
-		msg.RawEvent = ev
+		msg.RawEvent = &ev
 
 		// Only act when bot is mentioned
 		if !msg.BotMentioned {
