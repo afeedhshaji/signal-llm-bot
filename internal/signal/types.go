@@ -10,6 +10,7 @@ type Envelope struct {
 	SourceNumber string       `json:"sourceNumber"`
 	Source       string       `json:"source"`
 	SourceUUID   string       `json:"sourceUuid"`
+	Timestamp    int64        `json:"timestamp"`
 	DataMessage  *DataMessage `json:"dataMessage"`
 }
 
@@ -36,4 +37,11 @@ type Quote struct {
 	Author     string `json:"author"`
 	AuthorUUID string `json:"authorUuid"`
 	Text       string `json:"text"`
+}
+
+// QuoteRequest represents a quote to include when sending a message
+type QuoteRequest struct {
+	ID     int64  `json:"id"`
+	Author string `json:"author"`
+	Text   string `json:"text"`
 }

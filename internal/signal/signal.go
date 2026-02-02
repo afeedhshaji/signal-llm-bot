@@ -104,12 +104,25 @@ func (c *SignalClient) GetGroupPublicID(internalGroupID string) (string, error) 
 
 // SendMessage posts a message to /v2/send to the specified recipient
 func (c *SignalClient) SendMessage(to, message string) error {
+	return c.SendMessageWithQuote(to, message, nil)
+}
+
+// SendMessageWithQuote posts a message to /v2/send with an optional quote
+func (c *SignalClient) SendMessageWithQuote(to, message string, quote *QuoteRequest) error {
 	fmt.Printf("[signal] Sending message to %s: %q\n", to, message)
 	payload := map[string]interface{}{
 		"message": message,
 		"number":  c.Number,
 	}
 	payload["recipients"] = []string{to}
+
+	if quote != nil {
+		payload["quote_timestamp"] = quote.ID
+		payload["quote_author"] = quote.Author
+		payload["quote_message"] = quote.Text
+		fmt.Printf("[signal] Including quote from %s (id=%d): %q\n", quote.Author, quote.ID, quote.Text)
+	}
+
 	b, _ := json.Marshal(payload)
 	url := fmt.Sprintf("%s/v2/send", strings.TrimRight(c.APIURL, "/"))
 	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
@@ -132,6 +145,11 @@ func (c *SignalClient) SendMessage(to, message string) error {
 
 // SendFile posts a file attachment to /v2/send to the specified recipient
 func (c *SignalClient) SendFile(to, filePath, caption string) error {
+	return c.SendFileWithQuote(to, filePath, caption, nil)
+}
+
+// SendFileWithQuote posts a file attachment to /v2/send with an optional quote
+func (c *SignalClient) SendFileWithQuote(to, filePath, caption string, quote *QuoteRequest) error {
 	fmt.Printf("[signal] Sending file %s to %s\n", filePath, to)
 
 	fileContent, err := os.ReadFile(filePath)
@@ -167,6 +185,13 @@ func (c *SignalClient) SendFile(to, filePath, caption string) error {
 
 	if caption != "" {
 		payload["message"] = caption
+	}
+
+	if quote != nil {
+		payload["quote_timestamp"] = quote.ID
+		payload["quote_author"] = quote.Author
+		payload["quote_message"] = quote.Text
+		fmt.Printf("[signal] Including quote from %s (id=%d): %q\n", quote.Author, quote.ID, quote.Text)
 	}
 
 	jsonData, err := json.Marshal(payload)
