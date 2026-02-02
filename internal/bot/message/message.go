@@ -20,10 +20,10 @@ type Message struct {
 	RawEvent     *signal.Envelope
 }
 
+// SimpleExtract extracts message information from a signal envelope
 func SimpleExtract(envelope *signal.Envelope, botNumber, botUUID string) Message {
 	var m Message
 
-	// Fill Message fields from typed structs
 	m.SourceNumber = envelope.SourceNumber
 	m.SourceUUID = envelope.SourceUUID
 	if envelope.DataMessage != nil {
@@ -68,6 +68,7 @@ func SimpleExtract(envelope *signal.Envelope, botNumber, botUUID string) Message
 	return m
 }
 
+// RemoveMentionsFromText removes mentions from the message text
 func RemoveMentionsFromText(s string, mentions []signal.Mention) string {
 	if s == "" || len(mentions) == 0 {
 		return strings.TrimSpace(s)
@@ -97,15 +98,18 @@ func RemoveMentionsFromText(s string, mentions []signal.Mention) string {
 	return out
 }
 
+// LooksLikePhone checks if a string looks like a phone number
 func LooksLikePhone(s string) bool {
 	clean := strings.ReplaceAll(strings.TrimSpace(s), " ", "")
 	return regexp.MustCompile(`^\+?\d+$`).MatchString(clean)
 }
 
+// NormalizePhone normalizes a phone number by removing spaces
 func NormalizePhone(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), " ", "")
 }
 
+// TargetLabel returns a label for the message target
 func TargetLabel(m Message) string {
 	if m.GroupID != "" {
 		return "group " + m.GroupID
