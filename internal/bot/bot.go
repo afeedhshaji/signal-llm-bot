@@ -172,22 +172,35 @@ func (b *Bot) sendErrorResponse(msg message.Message) {
 
 // sendFile sends a file to the appropriate chat
 func (b *Bot) sendFile(msg message.Message, filePath, caption string) {
+	var quote *signal.QuoteRequest
+	if msg.RawEvent != nil && msg.RawEvent.Timestamp > 0 {
+		author := msg.SourceNumber
+		if author == "" {
+			author = msg.SourceUUID
+		}
+		quote = &signal.QuoteRequest{
+			ID:     msg.RawEvent.Timestamp,
+			Author: author,
+			Text:   msg.RawText,
+		}
+	}
+
 	if msg.GroupID != "" {
 		publicID, err := b.SignalClient.GetGroupPublicID(msg.GroupID)
 		if err != nil {
 			log.Printf("Error getting public group ID: %v", err)
 			return
 		}
-		err = b.SignalClient.SendFile(publicID, filePath, caption)
+		err = b.SignalClient.SendFileWithQuote(publicID, filePath, caption, quote)
 		if err != nil {
 			log.Printf("Error sending file to group: %v", err)
 		}
 	} else if msg.SourceNumber != "" {
-		if err := b.SignalClient.SendFile(msg.SourceNumber, filePath, caption); err != nil {
+		if err := b.SignalClient.SendFileWithQuote(msg.SourceNumber, filePath, caption, quote); err != nil {
 			log.Printf("Error sending file to user: %v", err)
 		}
 	} else if msg.SourceUUID != "" {
-		if err := b.SignalClient.SendFile(msg.SourceUUID, filePath, caption); err != nil {
+		if err := b.SignalClient.SendFileWithQuote(msg.SourceUUID, filePath, caption, quote); err != nil {
 			log.Printf("Error sending file to user-uuid: %v", err)
 		}
 	}
@@ -196,8 +209,6 @@ func (b *Bot) sendFile(msg message.Message, filePath, caption string) {
 // handleInstagramDownload processes Instagram video download requests
 func (b *Bot) handleInstagramDownload(msg message.Message, instagramURL string) {
 	log.Printf("Processing Instagram download request for: %s", instagramURL)
-
-	b.sendResponse(msg, "Downloading Instagram video... This may take a moment.")
 
 	result := igdownloader.DownloadInstagramVideo(instagramURL)
 

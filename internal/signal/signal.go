@@ -145,6 +145,11 @@ func (c *SignalClient) SendMessageWithQuote(to, message string, quote *QuoteRequ
 
 // SendFile posts a file attachment to /v2/send to the specified recipient
 func (c *SignalClient) SendFile(to, filePath, caption string) error {
+	return c.SendFileWithQuote(to, filePath, caption, nil)
+}
+
+// SendFileWithQuote posts a file attachment to /v2/send with an optional quote
+func (c *SignalClient) SendFileWithQuote(to, filePath, caption string, quote *QuoteRequest) error {
 	fmt.Printf("[signal] Sending file %s to %s\n", filePath, to)
 
 	fileContent, err := os.ReadFile(filePath)
@@ -180,6 +185,13 @@ func (c *SignalClient) SendFile(to, filePath, caption string) error {
 
 	if caption != "" {
 		payload["message"] = caption
+	}
+
+	if quote != nil {
+		payload["quote_timestamp"] = quote.ID
+		payload["quote_author"] = quote.Author
+		payload["quote_message"] = quote.Text
+		fmt.Printf("[signal] Including quote from %s (id=%d): %q\n", quote.Author, quote.ID, quote.Text)
 	}
 
 	jsonData, err := json.Marshal(payload)
