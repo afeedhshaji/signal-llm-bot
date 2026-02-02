@@ -10,18 +10,15 @@ import (
 	"time"
 
 	"github.com/afeedhshaji/signal-llm-bot/internal/bot/message"
-	"github.com/afeedhshaji/signal-llm-bot/internal/deduper"
-	"github.com/afeedhshaji/signal-llm-bot/internal/igdownloader"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/deduper"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/igdownloader"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/llm"
 	"github.com/afeedhshaji/signal-llm-bot/internal/signal"
 )
 
-type LLM interface {
-	Ask(prompt string) (string, error)
-}
-
 type Bot struct {
 	SignalClient *signal.SignalClient
-	GeminiClient LLM
+	LLMClient    llm.LLM
 	PollInterval time.Duration
 	Deduper      *deduper.Deduper
 	BotNumber    string
@@ -29,11 +26,11 @@ type Bot struct {
 	IgnoreSelf   bool
 }
 
-func NewBot(signalClient *signal.SignalClient, llm LLM, pollInterval time.Duration,
+func NewBot(signalClient *signal.SignalClient, llmClient llm.LLM, pollInterval time.Duration,
 	deduper *deduper.Deduper, botNumber string) *Bot {
 	return &Bot{
 		SignalClient: signalClient,
-		GeminiClient: llm,
+		LLMClient:    llmClient,
 		PollInterval: pollInterval,
 		Deduper:      deduper,
 		BotNumber:    botNumber,
@@ -120,7 +117,7 @@ func (b *Bot) handleMessages() {
 			log.Printf("Including reply context from %s: %q", msg.Quote.Author, msg.Quote.Text)
 		}
 
-		response, err := b.GeminiClient.Ask(prompt)
+		response, err := b.LLMClient.Ask(prompt)
 		if err != nil {
 			log.Printf("Error generating LLM response: %v", err)
 			b.sendErrorResponse(msg)

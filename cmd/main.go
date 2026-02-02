@@ -10,8 +10,8 @@ import (
 
 	"github.com/afeedhshaji/signal-llm-bot/config"
 	"github.com/afeedhshaji/signal-llm-bot/internal/bot"
-	"github.com/afeedhshaji/signal-llm-bot/internal/deduper"
-	"github.com/afeedhshaji/signal-llm-bot/internal/openrouter"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/deduper"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/openrouter"
 	signalapi "github.com/afeedhshaji/signal-llm-bot/internal/signal"
 )
 
