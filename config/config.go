@@ -8,14 +8,17 @@ import (
 )
 
 type Config struct {
-	SignalAPIURL  string
-	SignalNumber  string
-	BotName       string
-	PollInterval  string
-	GoogleAPIKey  string
-	GeminiModel   string
-	GeminiTimeout string
-	SystemPrompt  string
+	SignalAPIURL      string
+	SignalNumber      string
+	BotName           string
+	PollInterval      string
+	GoogleAPIKey      string
+	GeminiModel       string
+	GeminiTimeout     string
+	SystemPrompt      string
+	OpenRouterAPIKey  string
+	OpenRouterModel   string
+	OpenRouterTimeout string
 }
 
 func LoadConfig() (*Config, error) {
@@ -26,14 +29,17 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		SignalAPIURL:  getEnv("SIGNAL_API_URL", "http://localhost:8089"),
-		SignalNumber:  getEnv("SIGNAL_NUMBER", ""),
-		BotName:       getEnv("BOT_NAME", ""),
-		PollInterval:  getEnv("POLL_INTERVAL", "5s"),
-		GoogleAPIKey:  getEnv("GOOGLE_API_KEY", ""),
-		GeminiModel:   getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
-		GeminiTimeout: getEnv("GEMINI_TIMEOUT", "120s"),
-		SystemPrompt:  getEnv("SYSTEM_PROMPT", "You are a helpful assistant."),
+		SignalAPIURL:      getEnv("SIGNAL_API_URL", "http://localhost:8089"),
+		SignalNumber:      getEnv("SIGNAL_NUMBER", ""),
+		BotName:           getEnv("BOT_NAME", ""),
+		PollInterval:      getEnv("POLL_INTERVAL", "5s"),
+		GoogleAPIKey:      getEnv("GOOGLE_API_KEY", ""),
+		GeminiModel:       getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GeminiTimeout:     getEnv("GEMINI_TIMEOUT", "120s"),
+		SystemPrompt:      getEnv("SYSTEM_PROMPT", "You are a helpful assistant."),
+		OpenRouterAPIKey:  getEnv("OPENROUTER_API_KEY", ""),
+		OpenRouterModel:   getEnv("OPENROUTER_MODEL", "xiaomi/mimo-v2-flash:free"),
+		OpenRouterTimeout: getEnv("OPENROUTER_TIMEOUT", "120s"),
 	}, nil
 }
 

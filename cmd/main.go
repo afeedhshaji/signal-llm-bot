@@ -10,8 +10,8 @@ import (
 
 	"github.com/afeedhshaji/signal-llm-bot/config"
 	"github.com/afeedhshaji/signal-llm-bot/internal/bot"
-	"github.com/afeedhshaji/signal-llm-bot/internal/deduper"
-	"github.com/afeedhshaji/signal-llm-bot/internal/gemini"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/deduper"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/openrouter"
 	signalapi "github.com/afeedhshaji/signal-llm-bot/internal/signal"
 )
 
@@ -26,19 +26,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid poll interval: %v", err)
 	}
-	geminiTimeout, err := time.ParseDuration(cfg.GeminiTimeout)
+	// parse OpenRouter timeout (fallback to Gemini timeout string if desired)
+	openrouterTimeout, err := time.ParseDuration(cfg.OpenRouterTimeout)
 	if err != nil {
-		log.Fatalf("Invalid Gemini timeout: %v", err)
+		log.Fatalf("Invalid OpenRouter timeout: %v", err)
 	}
 	deduperTTL := 30 * time.Second
 	dedup := deduper.New(deduperTTL)
 
 	signalClient := signalapi.NewSignalClient(cfg.SignalAPIURL, cfg.SignalNumber)
-	geminiClient := gemini.New(cfg.GoogleAPIKey, cfg.GeminiModel, geminiTimeout, cfg.SystemPrompt)
+	// Build OpenRouter client and wire it into the bot as the LLM
+	openrouterEndpoint := "https://openrouter.ai/api/v1/chat/completions"
+	openrouterClient := openrouter.New(cfg.OpenRouterAPIKey, openrouterEndpoint, cfg.OpenRouterModel, openrouterTimeout, cfg.SystemPrompt)
 
 	botInstance := bot.NewBot(
 		signalClient,
-		geminiClient,
+		openrouterClient,
 		pollInterval,
 		dedup,
 		cfg.SignalNumber,

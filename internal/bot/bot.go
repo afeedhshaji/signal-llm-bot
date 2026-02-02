@@ -6,17 +6,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/afeedhshaji/signal-llm-bot/internal/bot/message"
-	"github.com/afeedhshaji/signal-llm-bot/internal/deduper"
-	"github.com/afeedhshaji/signal-llm-bot/internal/gemini"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/deduper"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/igdownloader"
+	"github.com/afeedhshaji/signal-llm-bot/pkg/llm"
 	"github.com/afeedhshaji/signal-llm-bot/internal/signal"
 )
 
 type Bot struct {
 	SignalClient *signal.SignalClient
-	GeminiClient *gemini.Client
+	LLMClient    llm.LLM
 	PollInterval time.Duration
 	Deduper      *deduper.Deduper
 	BotNumber    string
@@ -24,11 +26,11 @@ type Bot struct {
 	IgnoreSelf   bool
 }
 
-func NewBot(signalClient *signal.SignalClient, geminiClient *gemini.Client, pollInterval time.Duration,
+func NewBot(signalClient *signal.SignalClient, llmClient llm.LLM, pollInterval time.Duration,
 	deduper *deduper.Deduper, botNumber string) *Bot {
 	return &Bot{
 		SignalClient: signalClient,
-		GeminiClient: geminiClient,
+		LLMClient:    llmClient,
 		PollInterval: pollInterval,
 		Deduper:      deduper,
 		BotNumber:    botNumber,
@@ -60,8 +62,6 @@ func (b *Bot) handleMessages() {
 	}
 
 	for _, ev := range events {
-		log.Printf("Received event: %+v", ev)
-		// Deduplication
 		evb, _ := json.Marshal(ev)
 		hash := sha1.Sum(evb)
 		hashStr := hex.EncodeToString(hash[:])
@@ -74,39 +74,144 @@ func (b *Bot) handleMessages() {
 		msg.EventHash = hashStr
 		msg.RawEvent = &ev
 
-		// Only act when bot is mentioned
 		if !msg.BotMentioned {
 			continue
 		}
 
 		log.Printf("Mentioned in %s -> %q", message.TargetLabel(msg), msg.CleanText)
 
-		// Build prompt with quote context if present
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(msg.CleanText)), "/help") {
+			b.handleHelpCommand(msg)
+			return
+		}
+
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(msg.CleanText)), "/download") {
+			var instagramURL string
+
+			commandText := strings.TrimSpace(msg.CleanText[9:])
+			if commandText != "" {
+				instagramURL = igdownloader.ExtractInstagramURL(commandText)
+			}
+
+			if instagramURL == "" {
+				instagramURL = igdownloader.ExtractInstagramURL(msg.RawText)
+			}
+
+			if instagramURL == "" && msg.Quote != nil && msg.Quote.Text != "" {
+				instagramURL = igdownloader.ExtractInstagramURL(msg.Quote.Text)
+			}
+
+			if instagramURL != "" {
+				b.handleInstagramDownload(msg, instagramURL)
+				return
+			}
+
+			usage := "To download an Instagram video:\\n• Reply to a message containing an Instagram URL with '@bot /download'\\n• Or use '@bot /download <instagram_url>'"
+			b.sendResponse(msg, usage)
+			return
+		}
+
 		prompt := msg.CleanText
 		if msg.Quote != nil && msg.Quote.Text != "" {
 			prompt = "Context (replying to): \"" + msg.Quote.Text + "\"\n\nUser message: " + msg.CleanText
 			log.Printf("Including reply context from %s: %q", msg.Quote.Author, msg.Quote.Text)
 		}
 
-		response, err := b.GeminiClient.Ask(prompt)
+		response, err := b.LLMClient.Ask(prompt)
 		if err != nil {
-			log.Printf("Error generating Gemini response: %v", err)
-			continue
+			log.Printf("Error generating LLM response: %v", err)
+			b.sendErrorResponse(msg)
+			return
 		}
 
-		// If groupID is present, get public group ID
-		if msg.GroupID != "" {
-			publicID, err := b.SignalClient.GetGroupPublicID(msg.GroupID)
-			if err != nil {
-				log.Printf("Error getting public group ID: %v", err)
-				continue
-			}
-			err = b.SignalClient.SendMessage(publicID, response)
-			if err != nil {
-				log.Printf("Error sending message to group: %v", err)
-			}
-			continue
-		}
-		// TODO: Handle user messags
+		b.sendResponse(msg, response)
 	}
+}
+
+// sendResponse sends a text response to the appropriate chat
+func (b *Bot) sendResponse(msg message.Message, response string) {
+	if msg.GroupID != "" {
+		publicID, err := b.SignalClient.GetGroupPublicID(msg.GroupID)
+		if err != nil {
+			log.Printf("Error getting public group ID: %v", err)
+			return
+		}
+		err = b.SignalClient.SendMessage(publicID, response)
+		if err != nil {
+			log.Printf("Error sending message to group: %v", err)
+		}
+	} else if msg.SourceNumber != "" {
+		if err := b.SignalClient.SendMessage(msg.SourceNumber, response); err != nil {
+			log.Printf("Error sending message to user: %v", err)
+		}
+	} else if msg.SourceUUID != "" {
+		if err := b.SignalClient.SendMessage(msg.SourceUUID, response); err != nil {
+			log.Printf("Error sending message to user-uuid: %v", err)
+		}
+	}
+}
+
+// sendErrorResponse sends a generic error message to the chat
+func (b *Bot) sendErrorResponse(msg message.Message) {
+	generic := "An error occurred while processing your request. Please try again later."
+	b.sendResponse(msg, generic)
+}
+
+// sendFile sends a file to the appropriate chat
+func (b *Bot) sendFile(msg message.Message, filePath, caption string) {
+	if msg.GroupID != "" {
+		publicID, err := b.SignalClient.GetGroupPublicID(msg.GroupID)
+		if err != nil {
+			log.Printf("Error getting public group ID: %v", err)
+			return
+		}
+		err = b.SignalClient.SendFile(publicID, filePath, caption)
+		if err != nil {
+			log.Printf("Error sending file to group: %v", err)
+		}
+	} else if msg.SourceNumber != "" {
+		if err := b.SignalClient.SendFile(msg.SourceNumber, filePath, caption); err != nil {
+			log.Printf("Error sending file to user: %v", err)
+		}
+	} else if msg.SourceUUID != "" {
+		if err := b.SignalClient.SendFile(msg.SourceUUID, filePath, caption); err != nil {
+			log.Printf("Error sending file to user-uuid: %v", err)
+		}
+	}
+}
+
+// handleInstagramDownload processes Instagram video download requests
+func (b *Bot) handleInstagramDownload(msg message.Message, instagramURL string) {
+	log.Printf("Processing Instagram download request for: %s", instagramURL)
+
+	b.sendResponse(msg, "Downloading Instagram video... This may take a moment.")
+
+	result := igdownloader.DownloadInstagramVideo(instagramURL)
+
+	if !result.Success {
+		log.Printf("Instagram download failed: %v", result.Error)
+		b.sendResponse(msg, "Failed to download Instagram video. Please check the URL and try again.")
+		return
+	}
+
+	b.sendFile(msg, result.VideoFile, "")
+}
+
+// handleHelpCommand sends a help message with all available commands
+func (b *Bot) handleHelpCommand(msg message.Message) {
+	helpText := `🤖 *Signal Bot Commands*
+
+*Available Commands:*
+• /download - Download an Instagram video
+  • Reply to a message containing an Instagram URL with '@bot /download'
+  • Or use '@bot /download <instagram_url>'
+
+• /help - Show this help message
+
+*General Usage:*
+• Mention @bot in any message to chat with the AI
+• The bot responds to your questions and conversations
+• When you reply to a message, the bot includes that context in its response
+`
+	b.sendResponse(msg, helpText)
 }
